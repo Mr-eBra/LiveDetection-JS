@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Automated Facial Recognition</title>
+
+
+
+
+
+    <style>
+        .alert {
+            font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", Helvetica, Arial, sans-serif;
+        }
+    </style>
+
+
+
+
+
+</head>
+
+<body onload="start()">
+
+
+
+<div style="text-align: center">
+
+    <h1 style="color: #008CBA">
+        Biometric | Login With Face ID
+    </h1>
+
+    <video id="video" playsinline autoplay> Video Not Support In Your Device </video>
+
+
+
+
+    <canvas id="canvas" hidden></canvas>
+    <img id="img" width="300" height="300" src="" hidden><br>
+
+
+    <canvas id="crop_canvas" hidden></canvas>
+
+
+
+    <input id="base64_1" name="base64_1" value="" type="hidden">
+    <input id="base64_2" name="base64_2" value="" type="hidden">
+    <input id="base64_3" name="base64_3" value="" type="hidden">
+
+
+
+
+
+    <div id="error"></div>
+
+    <button id="reTake" type="button" class="button" onclick="reTakeCapture()"> ReTake Capture</button><br>
+
+
+</div>
+
+<script src="js/faceDetectore.min.js"></script>
+<script src="js/sweetalert.min.js"></script>
+<script src="js/adapter-latest.min.js"></script>
+
+
+<script>
+
+
+    var LOCAL_STREAM;
+    var FACE_DETECTOR;
+
+    var CAPTURE_LENGTH = 0;
+
+    var VIDEO = document.getElementById('video');
+
+    var CANVAS = document.getElementById('canvas');
+    var IMAGE = document.getElementById('img');
+
+    var CROP_CANVAS = document.getElementById('crop_canvas');
+
+
+    var INPUTS = [document.getElementById('base64_1'),document.getElementById('base64_2'),document.getElementById('base64_3')];
+
+    var ERROR = document.getElementById('error');
+
+
+
+    function start(){
+
+        swal({
+            position: 'center',
+            icon: 'img/intro.png',
+            title: 'Don not Cover Your Face',
+            text: ' Take off Mask And Glasses ',
+            className: 'alert',
+            buttons: false,
+            timer: 5000
+        }).then(() => {
+            vidOn();
+        });
+
+    }
+
+    function vidOn(){
+
+        if (navigator.mediaDevices!=null) {
+
+            navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
+
+            var options = {
+                video:true,
+                audio:false
+            };
+
+
+
+            navigator.getUserMedia(options,
+                function(stream) {
+
+                    IMAGE.hidden = true;
+
+
+                    swal({
+                        position: 'center',
+                        icon: 'img/detect.jpg',
+                        title: 'Look Front of Camera',
+                        text: 'Wait Until Capture Success',
+                        className: 'alert',
+                        buttons: false,
+                        timer: 3500
+                    }).then(() => {
+
+
+                        LOCAL_STREAM = stream;
+                        VIDEO.srcObject = LOCAL_STREAM;
+
+                        FACE_DETECTOR = new FaceDetector({video: VIDEO, flipLeftRight: false,flipUpsideDown: false});
+                        FACE_DETECTOR.startDetecting();
+                        VIDEO.hidden = false;
+                        detectFace();
+
+                    });
+
+
+
+                },
+                function(e) {
+
+                    console.log("Not Allowed Access To Camera Device");
+                    ERROR.innerHTML = "Not Allowed Access To Camera Device";
+                }
+            );
+
+
+        }else {
+
+            console.log("No Media Devices");
+            ERROR.innerHTML = "No Media Devices";
+        }
+
+    }
+
+
+    function vidOff(){
+        LOCAL_STREAM.getTracks()[0].stop();
+
+        swal({position: 'center',
+            icon: 'success',
+            title: 'Success',
+            text: 'Your face image has been saved',
+            className: 'alert',
+            buttons: false,
+            timer: 1800
+        })
+
+        VIDEO.hidden = true;
+    }
+
+
+    function detectFace(){
+        FACE_DETECTOR.setOnFaceUpdatedCallback(function (detectedFaces) {
+
+
+            if (detectedFaces.length === 1 && CAPTURE_LENGTH !== 3 ){
+
+                takeCapture();
+                cropCapture(detectedFaces);
+
+                CAPTURE_LENGTH = CAPTURE_LENGTH + 1;
+
+
+            }else if(CAPTURE_LENGTH === 3) {
+
+                window.cancelAnimationFrame(FACE_DETECTOR.setOnFaceUpdatedCallback());
+                vidOff();
+                IMAGE.hidden = false;
+            }
+        });
+    }
+
+    function takeCapture(){
+        var videoWidth = VIDEO.videoWidth;
+        var videoHeight = VIDEO.videoHeight;
+
+        var context = CANVAS.getContext("2d");
+
+        CANVAS.width = videoWidth;
+        CANVAS.height = videoHeight;
+        context.drawImage(VIDEO, 0, 0, videoWidth, videoHeight);
+
+        IMAGE.src = CANVAS.toDataURL('image/jpeg',1);
+    }
+
+
+    function cropCapture(detectedFace){
+
+        var face = detectedFace[0];
+
+        var context = CROP_CANVAS.getContext('2d');
+
+
+        var cordX = face.x * VIDEO.videoWidth - 100;
+        var cordY = face.y * VIDEO.videoHeight - 100;
+        var cordWidth = face.width * VIDEO.videoWidth + 180;
+        var cordHeight = face.height * VIDEO.videoHeight + 180;
+
+
+
+
+        if(cordX < 0){
+            cordX = 0;
+        }
+
+        if(cordY < 0){
+
+            cordY = 0;
+        }
+
+
+        if (cordWidth + cordX > CANVAS.width){
+
+            cordWidth = cordWidth - ((cordWidth + cordX) - CANVAS.width);
+        }
+
+        if (cordHeight + cordY > CANVAS.height){
+
+            cordHeight = cordHeight - ((cordHeight + cordY) - CANVAS.height);
+        }
+
+
+        CROP_CANVAS.width = cordWidth;
+        CROP_CANVAS.height = cordHeight;
+
+        context.drawImage(VIDEO,cordX,cordY,cordWidth,cordHeight,0,0,cordWidth,cordHeight);
+
+        toBase64();
+
+    }
+
+
+
+    function toBase64(){
+
+        var quality = 1;
+
+        var dataForInputs = CROP_CANVAS.toDataURL('image/jpeg',quality).split("base64,")[1];
+
+        var dataSize = (dataForInputs.length/1000).toFixed();
+
+        while (dataSize > 30 ){
+
+            quality = quality - (0.05);
+            dataForInputs = CROP_CANVAS.toDataURL('image/jpeg',quality).split("base64,")[1];
+            dataSize = (dataForInputs.length/1000).toFixed();
+
+        }
+
+
+        INPUTS[CAPTURE_LENGTH].value = dataForInputs;
+
+    }
+
+    function reTakeCapture(){
+        CAPTURE_LENGTH = 0;
+        vidOn();
+    }
+
+
+
+
+
+</script>
+
+
+</body>
+</html>
